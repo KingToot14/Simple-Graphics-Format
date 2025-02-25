@@ -1,3 +1,5 @@
 .testing/
 .venv/
 __pycache__/
+
+pyproject.toml
