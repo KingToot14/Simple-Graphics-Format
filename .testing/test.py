@@ -1,7 +1,9 @@
 import os
 from time import time
+import struct
 
 from PIL import Image
+import numpy as np
 
 from sgf_image_loader.sgf import SGF
 
@@ -22,7 +24,7 @@ class Tester:
         print(f"    <td>{int(self.colors / self.count)} colors</td>")
         print(f"    <td>{round(self.time / self.count, 2)}ms</td>")
         print(f"    <td>{self.format_bytes(round(self.png_size / self.count))}</td>")
-        print(f"    <td>{self.format_bytes(round(self.png_size / self.count))}</td>")
+        print(f"    <td>{self.format_bytes(round(self.sgf_size / self.count))}</td>")
         print(f"    <td>{round(self.diff_size / self.count, 2):,.2f}%</td>")
         print("</tr>")
 
@@ -46,7 +48,7 @@ class Tester:
 
         # convert png to sgf
         t = time()
-        SGF.save_from_image(sgf_out, image)
+        SGF.save_sgf(sgf_out, image)
         e = self.calc_time(t)
         
         # convert sgf to png
@@ -77,6 +79,21 @@ class Tester:
             else:
                 self.test_image(os.path.join(png_in, file), os.path.join(sgf_out, file), os.path.join(png_out, file), depth + "    ")    
     
+def main():
+    image = Image.open(".testing/png_in/areas/forest_6.png")
+    data = list(image.getdata())
+
+    s = time()
+    colors = image.getcolors()
+    library = {colors[index][1]: index for index in range(len(colors))}
+
+    pixels = bytearray()
+
+    for i in range(0, len(data), 4):
+        pixels += struct.pack('B', library[data[i]])
+    
 
 if __name__ == "__main__":
     Tester()
+
+    # main()

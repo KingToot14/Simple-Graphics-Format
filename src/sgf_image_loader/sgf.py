@@ -5,14 +5,17 @@ import numpy as np
 
 class SGF:
     @staticmethod
-    def save_from_pixels(path, pixels, size):
+    def save_sgf(path, image: Image):
         '''Saves an sgf file from an array of pixel data
         
         Args:
-            pixels (array): The pixel data stored in a 1D array
+            image (Image): The image to save
         '''
 
-        pixels = np.array(pixels, dtype=np.uint8)
+        image = image.convert("RGBA")
+
+        size = image.size
+        pixels = list(image.getdata())
 
         data = bytearray()
 
@@ -20,18 +23,21 @@ class SGF:
         # size
         data += struct.pack('HH', size[0], size[1])
 
+        # color palette
+        colors = [color[1] for color in image.getcolors()]
+
+        data += struct.pack('B', len(colors))
+        data += np.array(colors, dtype=np.uint8).tobytes()
+
         # --- Body --- #
         # pixel data
-        data += pixels.tobytes()
+        palette = {colors[index]: index for index in range(len(colors))}
+
+        for pixel in pixels:
+            data += struct.pack('B', palette[pixel])
 
         with open(path, 'wb') as file:
             file.write(data)
-
-    @staticmethod
-    def save_from_image(path, image: Image):
-        image = image.convert('RGBA')
-
-        SGF.save_from_pixels(path, image.getdata(), image.size)
 
     @staticmethod
     def load_sgf(source: str | bytes | bytearray) -> Image:
@@ -73,12 +79,28 @@ class SGF:
             out = struct.unpack(format, data[bp:bp+struct.calcsize(format)])
             bp += struct.calcsize(format)
 
-            return out[0]
+            if len(out) == 1:
+                return out[0]
+            return out
 
         # --- Header --- #
-        size = [parse_bytes('H'), parse_bytes('H')]
+        # size
+        size = parse_bytes('HH')
+
+        # palette
+        color_count = parse_bytes('B')
+        palette = {}
+        i = 0
+
+        while i < color_count:
+            palette[i] = parse_bytes('BBBB')
+
+            i += 1
 
         # --- Body --- #
         pixels = np.frombuffer(data, offset=bp, dtype=np.uint8)
+
+        # load palette
+        pixels = np.array([color for pixel in pixels for color in palette[pixel]], dtype=np.uint8)
 
         return [size, pixels]
