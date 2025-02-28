@@ -33,8 +33,28 @@ class SGF:
         # pixel data
         palette = {colors[index]: index for index in range(len(colors))}
 
+        # check for repetition
+        prev = None
+        reps = 0
+
+        total = 0
+
         for pixel in pixels:
-            data += struct.pack('B', palette[pixel])
+            if prev != palette[pixel]:
+                if prev != None:
+                    data += struct.pack('BB', reps, prev)
+                    total += reps
+                reps = 1
+                prev = palette[pixel]
+            else:
+                if reps >= 255:
+                    data += struct.pack('BB', reps, prev)
+                    total += reps
+                    reps = 0
+                reps += 1
+        
+        data += struct.pack('BB', reps, prev)
+        total += reps
 
         with open(path, 'wb') as file:
             file.write(data)
@@ -98,9 +118,15 @@ class SGF:
             i += 1
 
         # --- Body --- #
-        pixels = np.frombuffer(data, offset=bp, dtype=np.uint8)
+        pixel_count = size[0] * size[1]
+        i = 0
+
+        pixels = []
 
         # load palette
-        pixels = np.array([color for pixel in pixels for color in palette[pixel]], dtype=np.uint8)
+        while i < pixel_count:
+            reps, index = parse_bytes('BB')
+            pixels += [palette[index] for _ in range(reps)]
+            i += reps
 
-        return [size, pixels]
+        return [size, np.array(pixels, dtype=np.uint8)]
