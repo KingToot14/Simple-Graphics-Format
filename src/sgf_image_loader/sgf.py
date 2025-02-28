@@ -1,4 +1,5 @@
 import struct
+import gzip
 
 from PIL import Image
 import numpy as np
@@ -57,14 +58,14 @@ class SGF:
         total += reps
 
         with open(path, 'wb') as file:
-            file.write(data)
+            file.write(gzip.compress(data))
 
     @staticmethod
     def load_sgf(source: str | bytes | bytearray) -> Image:
         '''Reads the file at the given path and attempts to load it as an sgf file
         
         Args:
-            source (str | bytes | bytearray): The path to load from
+            source (str | bytes | bytearray): If a string, the path to load from. Else, a binary stream manually passed in and decompressed through the gzip algorithm. This method only uses gzip when a string is passed in.
         
         Returns:
             array: the pixel data of the image
@@ -73,7 +74,7 @@ class SGF:
         data: np.ndarray = None
 
         if isinstance(source, str):
-            with open(source, 'rb') as file:
+            with gzip.open(source, 'rb') as file:
                 data = SGF.load_sgf_data(file.read())
         elif isinstance(source, bytes) or isinstance(source, bytearray):
             data = SGF.load_sgf_data(source)
