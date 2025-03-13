@@ -3,7 +3,6 @@ from time import time
 import struct
 
 from PIL import Image
-import numpy as np
 
 from sgf_image_loader.sgf import SGF
 
@@ -48,7 +47,7 @@ class Tester:
 
         # convert png to sgf
         t = time()
-        SGF.save_sgf(sgf_out, image)
+        SGF.save_sgf(sgf_out, image, find_best=True)
         e = self.calc_time(t)
         
         # convert sgf to png

@@ -1,18 +1,60 @@
 import struct
 import gzip
+from enum import Enum
 
 from PIL import Image
 import numpy as np
 
+class PaletteSize(Enum):
+    ONE_BYTE = 0
+    TWO_BYTE = 1
+    FOUR_BYTE = 2
+
 class SGF:
     @staticmethod
-    def save_sgf(path, image: Image):
+    def save_sgf(path, image: Image, vertical_stacking: bool = False, find_best: bool = False):
         '''Saves an sgf file from an array of pixel data
         
         Args:
             image (Image): The image to save
+
+            palette_size (PaletteSize): How large the palette should be (from 1 to 4 bytes)
+            transparency (int): The uniform alpha value of all pixels. If -1, each pixel has its own alpha value
+            verbose (bool): If true, each pixel is stored directly instead of in a palette
+            vertical_stacking (bool): If true, pixels are stacked vertically instead of horizontally
+
+            find_best (bool): If true, other settings are overridden in order to find the best settings to use
         '''
 
+        data = None
+
+        color_count = len(image.getcolors(256**3))
+        palette_size = 0
+
+        while color_count > 256:
+            palette_size += 1
+            color_count //= 256 
+
+        palette_size = PaletteSize(palette_size)
+
+        if find_best:
+            best = SGF.convert_to_sgf(path, image, False)
+            best_size = len(best)
+
+            d = SGF.convert_to_sgf(path, image, True)
+            if best_size > len(d):
+                best = d
+                best_size = len(d)
+            
+            data = best
+        else:
+            data = SGF.convert_to_sgf(path, image, vertical_stacking)
+
+        with open(path, 'wb') as file:
+            file.write(gzip.compress(data))
+
+    @staticmethod
+    def convert_to_sgf(path, image: Image, vertical_stacking: bool = False):
         image = image.convert("RGBA")
 
         size = image.size
@@ -21,11 +63,17 @@ class SGF:
         data = bytearray()
 
         # --- Header --- #
+        flags = 0
+
+        flags |= 1 if vertical_stacking else 0
+
+        data += struct.pack('B', flags)
+
         # size
         data += struct.pack('HH', size[0], size[1])
 
         # color palette
-        colors = [color[1] for color in image.getcolors()]
+        colors = [color[1] for color in image.getcolors(256**3)]
 
         data += struct.pack('B', len(colors))
         data += np.array(colors, dtype=np.uint8).tobytes()
@@ -37,28 +85,37 @@ class SGF:
         # check for repetition
         prev = None
         reps = 0
+        row = 1
+        pixel_count = size[0] * size[1]
 
-        total = 0
+        for i in range(len(pixels)):
+            pixel = None
 
-        for pixel in pixels:
-            if prev != palette[pixel]:
+            if vertical_stacking:
+                if (i * size[0] + row - 1) > row * pixel_count:
+                    row += 1
+                pixel = pixels[(i * size[0] + row - 1) % pixel_count]
+            else:
+                pixel = pixels[i]
+
+            check = False
+
+            check = prev != palette[pixel]
+
+            if check:
                 if prev != None:
                     data += struct.pack('BB', reps, prev)
-                    total += reps
                 reps = 1
                 prev = palette[pixel]
             else:
                 if reps >= 255:
                     data += struct.pack('BB', reps, prev)
-                    total += reps
                     reps = 0
                 reps += 1
         
         data += struct.pack('BB', reps, prev)
-        total += reps
 
-        with open(path, 'wb') as file:
-            file.write(gzip.compress(data))
+        return data
 
     @staticmethod
     def load_sgf(source: str | bytes | bytearray) -> Image:
@@ -105,6 +162,11 @@ class SGF:
             return out
 
         # --- Header --- #
+        # flag byte
+        flags = parse_bytes('B')
+
+        vertical = (flags & 1) == 1
+
         # size
         size = parse_bytes('HH')
 
@@ -121,13 +183,24 @@ class SGF:
         # --- Body --- #
         pixel_count = size[0] * size[1]
         i = 0
+        row = 1
 
-        pixels = []
+        pixels = [None for _ in range(pixel_count)]
 
         # load palette
         while i < pixel_count:
             reps, index = parse_bytes('BB')
-            pixels += [palette[index] for _ in range(reps)]
+
+            # stacking
+            if vertical:
+                for rep in range(reps):
+                    if ((i + rep) * size[0] + row - 1) >= row * pixel_count:
+                        row += 1
+
+                    pixels[((i + rep) * size[0] + row - 1) % pixel_count] = palette[index]
+            else:
+                pixels[i:i+reps] = [palette[index] for _ in range(reps)]
+            
             i += reps
 
         return [size, np.array(pixels, dtype=np.uint8)]
