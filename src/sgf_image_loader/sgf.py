@@ -28,7 +28,7 @@ class SGF:
 
         data = None
 
-        color_count = len(image.getcolors(256**3))
+        color_count = len(image.getcolors())
         palette_size = 0
 
         while color_count > 256:
@@ -38,23 +38,23 @@ class SGF:
         palette_size = PaletteSize(palette_size)
 
         if find_best:
-            best = SGF.convert_to_sgf(path, image, False)
+            best = SGF.convert_to_sgf(image, False)
             best_size = len(best)
 
-            d = SGF.convert_to_sgf(path, image, True)
+            d = SGF.convert_to_sgf(image, True)
             if best_size > len(d):
                 best = d
                 best_size = len(d)
             
             data = best
         else:
-            data = SGF.convert_to_sgf(path, image, vertical_stacking)
+            data = SGF.convert_to_sgf(image, vertical_stacking)
 
         with open(path, 'wb') as file:
             file.write(gzip.compress(data))
 
     @staticmethod
-    def convert_to_sgf(path, image: Image, vertical_stacking: bool = False):
+    def convert_to_sgf(image: Image, vertical_stacking: bool = False):
         image = image.convert("RGBA")
 
         size = image.size
@@ -73,7 +73,7 @@ class SGF:
         data += struct.pack('HH', size[0], size[1])
 
         # color palette
-        colors = [color[1] for color in image.getcolors(256**3)]
+        colors = [color[1] for color in image.getcolors()]
 
         data += struct.pack('B', len(colors))
         data += np.array(colors, dtype=np.uint8).tobytes()
