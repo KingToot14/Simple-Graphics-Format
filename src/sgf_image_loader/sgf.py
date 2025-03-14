@@ -1,18 +1,12 @@
 import struct
 import gzip
-from enum import Enum
 
 from PIL import Image
 import numpy as np
 
-class PaletteSize(Enum):
-    ONE_BYTE = 0
-    TWO_BYTE = 1
-    FOUR_BYTE = 2
-
 class SGF:
     @staticmethod
-    def save_sgf(path, image: Image, vertical_stacking: bool = False, find_best: bool = False):
+    def save_sgf(path, image: Image, vertical_stacking: bool = False, disable_repetition: bool = False, find_best: bool = False):
         '''Saves an sgf file from an array of pixel data
         
         Args:
@@ -35,17 +29,29 @@ class SGF:
             palette_size += 1
             color_count //= 256 
 
-        palette_size = PaletteSize(palette_size)
-
         if find_best:
-            best = SGF.convert_to_sgf(image, False)
+            # Horizontal Stacking with Repetition
+            best = SGF.convert_to_sgf(image, False, False)
             best_size = len(best)
 
-            d = SGF.convert_to_sgf(image, True)
+            # Vertical Stacking with Repetition
+            d = SGF.convert_to_sgf(image, True, False)
             if best_size > len(d):
                 best = d
                 best_size = len(d)
             
+            # Horizontal Stacking without Repetition
+            d = SGF.convert_to_sgf(image, False, True)
+            if best_size > len(d):
+                best = d
+                best_size = len(d)
+            
+            # Vertical Stacking without Repetition
+            d = SGF.convert_to_sgf(image, True, True)
+            if best_size > len(d):
+                best = d
+                best_size = len(d)
+
             data = best
         else:
             data = SGF.convert_to_sgf(image, vertical_stacking)
@@ -54,7 +60,7 @@ class SGF:
             file.write(gzip.compress(data))
 
     @staticmethod
-    def convert_to_sgf(image: Image, vertical_stacking: bool = False):
+    def convert_to_sgf(image: Image, vertical_stacking: bool = False, disable_repetition: bool = False):
         image = image.convert("RGBA")
 
         size = image.size
@@ -66,6 +72,7 @@ class SGF:
         flags = 0
 
         flags |= 1 if vertical_stacking else 0
+        flags |= 2 if disable_repetition else 0
 
         data += struct.pack('B', flags)
 
@@ -85,35 +92,46 @@ class SGF:
         # check for repetition
         prev = None
         reps = 0
-        row = 1
+        index = 0
         pixel_count = size[0] * size[1]
 
         for i in range(len(pixels)):
             pixel = None
 
             if vertical_stacking:
-                if (i * size[0] + row - 1) > row * pixel_count:
-                    row += 1
-                pixel = pixels[(i * size[0] + row - 1) % pixel_count]
+                pixel = pixels[index]
+
+                index += size[0]
+                if index >= pixel_count:
+                    index %= pixel_count
+                    index += 1
             else:
                 pixel = pixels[i]
 
-            check = False
-
-            check = prev != palette[pixel]
-
-            if check:
+            if prev != palette[pixel]:
                 if prev != None:
-                    data += struct.pack('BB', reps, prev)
+                    if not disable_repetition:
+                        data += struct.pack('BB', reps, prev)
+                    else:
+                        for rep in range(reps):
+                            data += struct.pack('B', prev)
                 reps = 1
                 prev = palette[pixel]
             else:
                 if reps >= 255:
-                    data += struct.pack('BB', reps, prev)
+                    if not disable_repetition:
+                        data += struct.pack('BB', reps, prev)
+                    else:
+                        for rep in range(reps):
+                            data += struct.pack('B', prev)
                     reps = 0
                 reps += 1
         
-        data += struct.pack('BB', reps, prev)
+        if not disable_repetition:
+            data += struct.pack('BB', reps, prev)
+        else:
+            for rep in range(reps):
+                data += struct.pack('B', prev)
 
         return data
 
@@ -165,7 +183,8 @@ class SGF:
         # flag byte
         flags = parse_bytes('B')
 
-        vertical = (flags & 1) == 1
+        vertical = (flags & 1) != 0
+        disable_reps = (flags & 2) != 0
 
         # size
         size = parse_bytes('HH')
@@ -183,21 +202,26 @@ class SGF:
         # --- Body --- #
         pixel_count = size[0] * size[1]
         i = 0
-        row = 1
+        v_index = 0
 
         pixels = [None for _ in range(pixel_count)]
 
         # load palette
         while i < pixel_count:
-            reps, index = parse_bytes('BB')
+            reps = 1
+            if not disable_reps:
+                reps = parse_bytes('B')
+            index = parse_bytes('B')
 
             # stacking
             if vertical:
                 for rep in range(reps):
-                    if ((i + rep) * size[0] + row - 1) >= row * pixel_count:
-                        row += 1
+                    pixels[v_index] = palette[index]
 
-                    pixels[((i + rep) * size[0] + row - 1) % pixel_count] = palette[index]
+                    v_index += size[0]
+                    if v_index >= pixel_count:
+                        v_index %= pixel_count
+                        v_index += 1
             else:
                 pixels[i:i+reps] = [palette[index] for _ in range(reps)]
             
