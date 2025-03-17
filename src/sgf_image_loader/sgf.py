@@ -6,28 +6,27 @@ import numpy as np
 
 class SGF:
     @staticmethod
-    def save_sgf(path, image: Image, vertical_stacking: bool = False, disable_repetition: bool = False, find_best: bool = False):
+    def save_sgf(path, image: Image, vertical_stacking: bool = False, disable_repetition: bool = False, find_best: bool = False) -> bool:
         '''Saves an sgf file from an array of pixel data
         
         Args:
-            image (Image): The image to save
+            image (PIL.Image): The image to save
 
-            palette_size (PaletteSize): How large the palette should be (from 1 to 4 bytes)
-            transparency (int): The uniform alpha value of all pixels. If -1, each pixel has its own alpha value
-            verbose (bool): If true, each pixel is stored directly instead of in a palette
             vertical_stacking (bool): If true, pixels are stacked vertically instead of horizontally
+            disable_repetition (bool): If true, each pixel is stored linearly with no compression based on repetition
 
             find_best (bool): If true, other settings are overridden in order to find the best settings to use
+        
+        Returns:
+            bool: Whether or not the file saved successfully
         '''
 
         data = None
 
         color_count = len(image.getcolors())
-        palette_size = 0
-
-        while color_count > 256:
-            palette_size += 1
-            color_count //= 256 
+        
+        if not color_count:
+            return False
 
         if find_best:
             # Horizontal Stacking with Repetition
@@ -58,9 +57,22 @@ class SGF:
 
         with open(path, 'wb') as file:
             file.write(gzip.compress(data))
+        
+        return True
 
     @staticmethod
-    def convert_to_sgf(image: Image, vertical_stacking: bool = False, disable_repetition: bool = False):
+    def convert_to_sgf(image: Image, vertical_stacking: bool = False, disable_repetition: bool = False) -> bytearray:
+        '''Converts an image to the SGF format.
+
+        Args:
+            image (PIL.Image): The image to convert
+
+            vertical_stacking (bool): If true, pixels are stacked vertically instead of horizontally
+            disable_repetition (bool): If true, each pixel is stored linearly with no compression based on repetition
+        
+        Returns:
+            bytearray: The image data in the SGF format
+        '''
         image = image.convert("RGBA")
 
         size = image.size
