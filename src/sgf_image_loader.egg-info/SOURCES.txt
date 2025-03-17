@@ -1,10 +1,9 @@
+README.md
 pyproject.toml
 src/sgf_image_loader/__init__.py
 src/sgf_image_loader/sgf.py
-src/sgf_image_loader/sgf_converter.py
-src/sgf_image_loader/sgf_parser.py
-src/sgf_image_loader/sgf_writer.py
 src/sgf_image_loader.egg-info/PKG-INFO
 src/sgf_image_loader.egg-info/SOURCES.txt
 src/sgf_image_loader.egg-info/dependency_links.txt
+src/sgf_image_loader.egg-info/requires.txt
 src/sgf_image_loader.egg-info/top_level.txt
